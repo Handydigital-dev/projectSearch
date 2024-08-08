@@ -1,4 +1,4 @@
-python_version >= "3.8, <3.12"
+python_version >= "3.11, <3.12"
 numpy==1.23.5
 streamlit==1.27.0
 pandas==2.1.0
