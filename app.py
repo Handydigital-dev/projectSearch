@@ -100,7 +100,7 @@ def execute_mysql_command(ssh_client, mysql_command):
         return None
 
 # プロジェクトデータを取得する関数
-def get_project_data(ssh_client, project_name=None, product_name=None, talent_name=None, product_genre=None, group_name=None, contact_person=None, budget_min=None, budget_max=None, created_start=None, created_end=None):
+def get_project_data(ssh_client, project_name=None, product_name=None, talent_name=None, product_genre=None, group_name=None, contact_person=None, list_price=None, created_start=None, created_end=None):
     conditions = []
     if project_name:
         conditions.append(f"p.name LIKE '%{project_name}%'")
@@ -111,15 +111,13 @@ def get_project_data(ssh_client, project_name=None, product_name=None, talent_na
     if product_genre:
         genre_codes = [code for code, name in PRODUCT_GENRE_MAPPING.items() if name == product_genre]
         if genre_codes:
-            conditions.append(f"p.product_genre_cd IN ({','.join(f"'{code}'" for code in genre_codes)})")
+            conditions.append(f"p.product_genre_cd IN ({','.join([f"'{code}'" for code in genre_codes])})")
     if group_name:
         conditions.append(f"tlg.name LIKE '%{group_name}%'")
     if contact_person:
         conditions.append(f"p.contact_person LIKE '%{contact_person}%'")
-    if budget_min is not None:
-        conditions.append(f"p.budget >= {budget_min}")
-    if budget_max is not None:
-        conditions.append(f"p.budget <= {budget_max}")
+    if list_price:
+        conditions.append(f"ttl.price LIKE '%{list_price}%'")
     if created_start:
         conditions.append(f"DATE(p.created) >= '{created_start}'")
     if created_end:
@@ -184,45 +182,45 @@ def get_project_data(ssh_client, project_name=None, product_name=None, talent_na
     return None
 
 # タレントデータを取得する関数
-def get_talent_data(ssh_client, project_id, talent_list_name):
+def get_talent_data(ssh_client, project_id, talent_list_id):
     query = f"""
-    SELECT DISTINCT
-        t.name AS タレント名,
-        FLOOR(DATEDIFF(CURDATE(), t.birthday_for_search) / 365) AS 年齢,
-        ttl.nego_level AS リスト確認状況,
-        ttl.price AS リスト価格,
-        ttl.memo AS リスト備考,
-        t.hobby AS 趣味,
-        t.skill AS 特技,
-        t.biography AS 経歴,
-        CONCAT(
-            IFNULL(t.fee_year_cm_lower, ''),
-            CASE 
-                WHEN t.fee_year_cm_lower IS NOT NULL AND t.fee_year_cm_upper IS NOT NULL THEN '～'
-                ELSE ''
-            END,
-            IFNULL(t.fee_year_cm_upper, '')
-        ) AS handy料金,
-        t.memo AS handyメモ,
-        ttl.sort_no AS ソート番号,
-        DATE(ttl.created) AS タレントリスト登録日,
-        tlg.name AS グループ名
-    FROM 
-        handy_casting.projects p
-    JOIN
-        handy_casting.talent_lists tl ON p.id = tl.project_id
-    JOIN
-        handy_casting.talents_talent_lists ttl ON tl.id = ttl.talent_list_id
-    JOIN
-        handy_casting.talents t ON ttl.talent_id = t.id
-    LEFT JOIN
-        handy_casting.talent_list_groups tlg ON ttl.talent_list_group_id = tlg.id
-    WHERE 
-        p.id = '{project_id}'
-        AND tl.name = '{talent_list_name}'
-    ORDER BY 
-        tlg.name, ttl.sort_no, t.name;
-    """
+        SELECT DISTINCT
+            IFNULL(t.name, '-') AS タレント名,
+            IFNULL(FLOOR(DATEDIFF(CURDATE(), t.birthday_for_search) / 365), '-') AS 年齢,
+            IFNULL(tlg.name, '設定なし') AS グループ名,
+            IFNULL(ttl.nego_level, '-') AS リスト確認状況,
+            IFNULL(ttl.price, '-') AS リスト価格,
+            IFNULL(ttl.memo, '-') AS リスト備考,
+            IFNULL(t.hobby, '-') AS 趣味,
+            IFNULL(t.skill, '-') AS 特技,
+            IFNULL(t.biography, '-') AS 経歴,
+            IFNULL(CONCAT(
+                IFNULL(t.fee_year_cm_lower, ''),
+                CASE 
+                    WHEN t.fee_year_cm_lower IS NOT NULL AND t.fee_year_cm_upper IS NOT NULL THEN '～'
+                    ELSE ''
+                END,
+                IFNULL(t.fee_year_cm_upper, '')
+            ), '-') AS handy料金,
+            IFNULL(t.memo, '-') AS handyメモ,
+            IFNULL(ttl.sort_no, '-') AS ソート番号,
+            IFNULL(DATE(ttl.created), '-') AS タレントリスト登録日
+        FROM 
+            handy_casting.projects p
+        JOIN
+            handy_casting.talent_lists tl ON p.id = tl.project_id
+        JOIN
+            handy_casting.talents_talent_lists ttl ON tl.id = ttl.talent_list_id
+        JOIN
+            handy_casting.talents t ON ttl.talent_id = t.id
+        LEFT JOIN
+            handy_casting.talent_list_groups tlg ON ttl.talent_list_group_id = tlg.id
+        WHERE 
+            p.id = '{project_id}'
+            AND tl.id = '{talent_list_id}'
+        ORDER BY 
+            tlg.name, ttl.sort_no;
+            """
     
     result = execute_mysql_command(ssh_client, query)
     if result:
@@ -241,21 +239,27 @@ def get_talent_data(ssh_client, project_id, talent_list_name):
             else:
                 df[column] = df[column].fillna('-')
         
+        # \nを改行として表示
+        for column in df.columns:
+            df[column] = df[column].apply(lambda x: x.replace('\\n', '\n') if isinstance(x, str) else x)
+        
         return df
     return None
 
 # タレントリスト名の選択肢を取得する関数
 def get_talent_list_options(ssh_client, project_id):
     query = f"""
-    SELECT DISTINCT tl.name
+    SELECT tl.id, tl.name
     FROM handy_casting.talent_lists tl
     WHERE tl.project_id = '{project_id}'
-    ORDER BY tl.name;
+    ORDER BY tl.id desc;
     """
     result = execute_mysql_command(ssh_client, query)
     if result:
         lines = result.strip().split('\n')
-        return [line for line in lines[1:]]  # ヘッダーを除外
+        headers = lines[0].split('\t')
+        data = [line.split('\t') for line in lines[1:]]
+        return [(row[0], row[1]) for row in data]  # (id, name)のタプルのリストを返す
     return []
 
 # product_genre_mapping.jsonから商品ジャンルの選択肢を取得する関数
@@ -266,7 +270,8 @@ def get_product_genre_options_from_json() -> List[str]:
 
 # メイン関数
 def main():
-    st.title('プロジェクト検索システム')
+    st.title('AICSプロジェクト検索システム')
+    st.info('サイドバーに条件を入力して検索ボタンを押してください。リストのグループ名や担当者やリスト記載の価格で検索もできます。')
 
     # セッション状態の初期化
     if 'search_params' not in st.session_state:
@@ -277,8 +282,7 @@ def main():
             'product_genre': '選択してください',
             'group_name': '',
             'contact_person': '',
-            'budget_min': 0,
-            'budget_max': 0,
+            'list_price': '',
             'created_start': None,
             'created_end': None
         }
@@ -288,7 +292,6 @@ def main():
     # 検索条件の入力
     st.session_state.search_params['project_name'] = st.sidebar.text_input('プロジェクト名', value=st.session_state.search_params['project_name'])
     st.session_state.search_params['product_name'] = st.sidebar.text_input('商品名', value=st.session_state.search_params['product_name'])
-    st.session_state.search_params['talent_name'] = st.sidebar.text_input('タレント名', value=st.session_state.search_params['talent_name'])
     
     # 商品ジャンルの選択肢を取得
     product_genre_options = get_product_genre_options_from_json()
@@ -299,12 +302,12 @@ def main():
     )
 
     # 新しい検索条件を追加
-    st.session_state.search_params['group_name'] = st.sidebar.text_input('グループ名', value=st.session_state.search_params['group_name'])
-    st.session_state.search_params['contact_person'] = st.sidebar.text_input('連絡担当者', value=st.session_state.search_params['contact_person'])
-    st.session_state.search_params['budget_min'] = st.sidebar.number_input('最小予算', min_value=0, value=st.session_state.search_params['budget_min'])
-    st.session_state.search_params['budget_max'] = st.sidebar.number_input('最大予算', min_value=0, value=st.session_state.search_params['budget_max'])
+    st.session_state.search_params['talent_name'] = st.sidebar.text_input('タレント名', value=st.session_state.search_params['talent_name'])
+    st.session_state.search_params['group_name'] = st.sidebar.text_input('リストグループ名', value=st.session_state.search_params['group_name'])
+    st.session_state.search_params['list_price'] = st.sidebar.text_input('リスト価格(フリー入力)', value=st.session_state.search_params['list_price'])
 
     # 作成日の検索条件を追加
+    st.session_state.search_params['contact_person'] = st.sidebar.text_input('プロジェクト担当者', value=st.session_state.search_params['contact_person'])
     st.session_state.search_params['created_start'] = st.sidebar.date_input('作成日（開始）', value=st.session_state.search_params['created_start'])
     st.session_state.search_params['created_end'] = st.sidebar.date_input('作成日（終了）', value=st.session_state.search_params['created_end'])
 
@@ -321,8 +324,7 @@ def main():
             'product_genre': '選択してください',
             'group_name': '',
             'contact_person': '',
-            'budget_min': 0,
-            'budget_max': 0,
+            'list_price': '',
             'created_start': None,
             'created_end': None
         }
@@ -334,8 +336,8 @@ def main():
     if 'selected_project_id' not in st.session_state:
         st.session_state.selected_project_id = None
 
-    if 'selected_talent_list_name' not in st.session_state:
-        st.session_state.selected_talent_list_name = None
+    if 'selected_talent_list_id' not in st.session_state:
+        st.session_state.selected_talent_list_id = None
 
     if 'talents_df' not in st.session_state:
         st.session_state.talents_df = None
@@ -353,8 +355,7 @@ def main():
                         st.session_state.search_params['product_genre'] if st.session_state.search_params['product_genre'] != '選択してください' else None, 
                         st.session_state.search_params['group_name'], 
                         st.session_state.search_params['contact_person'], 
-                        st.session_state.search_params['budget_min'] if st.session_state.search_params['budget_min'] > 0 else None, 
-                        st.session_state.search_params['budget_max'] if st.session_state.search_params['budget_max'] > 0 else None,
+                        st.session_state.search_params['list_price'],
                         st.session_state.search_params['created_start'],
                         st.session_state.search_params['created_end']
                     )
@@ -369,11 +370,14 @@ def main():
 
     if st.session_state.projects_df is not None and not st.session_state.projects_df.empty:
         # プロジェクトの選択
-        project_options = st.session_state.projects_df['プロジェクト名'].tolist()
+        st.session_state.projects_df['プロジェクト表示名'] = st.session_state.projects_df.apply(
+            lambda row: f"{row['プロジェクト名']}（{row['商品名']}）- {row['プロジェクト作成日']}", axis=1
+        )
+        project_options = st.session_state.projects_df['プロジェクト表示名'].tolist()
         selected_project = st.selectbox('プロジェクトを選択してください:', project_options)
         
         if selected_project:
-            st.session_state.selected_project_id = st.session_state.projects_df[st.session_state.projects_df['プロジェクト名'] == selected_project]['プロジェクトID'].values[0]
+            st.session_state.selected_project_id = st.session_state.projects_df[st.session_state.projects_df['プロジェクト表示名'] == selected_project]['プロジェクトID'].values[0]
 
     if st.session_state.selected_project_id:
         ssh_client, temp_key_file_path = create_ssh_client()
@@ -381,23 +385,27 @@ def main():
             try:
                 # 選択されたプロジェクトの詳細を表示
                 st.subheader('プロジェクト詳細')
-                project_details = st.session_state.projects_df[st.session_state.projects_df['プロジェクトID'] == st.session_state.selected_project_id].iloc[0]
-                st.table(project_details.to_frame().T)
+                try:
+                    project_details = st.session_state.projects_df[st.session_state.projects_df['プロジェクトID'] == st.session_state.selected_project_id].iloc[0]
+                    st.table(project_details.to_frame().T)
+                except Exception as e:
+                    st.error(f"プロジェクト詳細の表示中にエラーが発生しました: {str(e)}")
 
                 # タレントリスト名の選択肢を取得
                 talent_list_options = get_talent_list_options(ssh_client, st.session_state.selected_project_id)
                 if talent_list_options:
-                    selected_talent_list = st.selectbox('タレントリストを選択してください:', talent_list_options)
+                    talent_list_choices = [f"{name} (ID: {id})" for id, name in talent_list_options]
+                    selected_talent_list = st.selectbox('タレントリストを選択してください:', talent_list_choices)
                     if selected_talent_list:
-                        st.session_state.selected_talent_list_name = selected_talent_list
+                        st.session_state.selected_talent_list_id = selected_talent_list.split("(ID: ")[1].split(")")[0]
                 else:
                     st.warning('このプロジェクトに関連するタレントリストが見つかりませんでした。')
-                    st.session_state.selected_talent_list_name = None
+                    st.session_state.selected_talent_list_id = None
 
                 # タレント情報の取得と表示
-                if st.session_state.selected_talent_list_name:
+                if st.session_state.selected_talent_list_id:
                     with st.spinner('タレント情報を取得中...'):
-                        st.session_state.talents_df = get_talent_data(ssh_client, st.session_state.selected_project_id, st.session_state.selected_talent_list_name)
+                        st.session_state.talents_df = get_talent_data(ssh_client, st.session_state.selected_project_id, st.session_state.selected_talent_list_id)
                     
                     if st.session_state.talents_df is not None and not st.session_state.talents_df.empty:
                         st.subheader('タレント情報')
@@ -408,11 +416,13 @@ def main():
                         st.download_button(
                             label="タレント情報をCSVでダウンロード",
                             data=csv,
-                            file_name=f"{selected_project}_{st.session_state.selected_talent_list_name}_talents.csv",
+                            file_name=f"{selected_project}_{st.session_state.selected_talent_list_id}_talents.csv",
                             mime="text/csv",
                         )
                     else:
                         st.warning('選択されたタレントリストに関連するタレント情報が見つかりませんでした。')
+            except Exception as e:
+                st.error(f"エラーが発生しました: {str(e)}")
             finally:
                 ssh_client.close()
                 os.unlink(temp_key_file_path)
