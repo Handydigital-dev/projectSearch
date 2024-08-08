@@ -6,7 +6,7 @@ import paramiko
 import os
 from dotenv import load_dotenv
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import json
 from typing import List, Tuple
 
@@ -285,7 +285,9 @@ def main():
             'contact_person': '',
             'list_price': '',
             'created_start': None,
-            'created_end': None
+            'created_end': None,
+            'created_start_enabled': False,
+            'created_end_enabled': False
         }
 
     st.sidebar.header('検索条件')
@@ -297,8 +299,7 @@ def main():
     # 商品ジャンルの選択肢を取得
     product_genre_options = get_product_genre_options_from_json()
     st.session_state.search_params['product_genre'] = st.sidebar.selectbox(
-        '商品ジャンル',
-        options=product_genre_options,
+        '商品ジャンル',options=product_genre_options,
         index=product_genre_options.index(st.session_state.search_params['product_genre'])
     )
 
@@ -306,11 +307,33 @@ def main():
     st.session_state.search_params['talent_name'] = st.sidebar.text_input('タレント名', value=st.session_state.search_params['talent_name'])
     st.session_state.search_params['group_name'] = st.sidebar.text_input('リストグループ名', value=st.session_state.search_params['group_name'])
     st.session_state.search_params['list_price'] = st.sidebar.text_input('リスト価格(フリー入力)', value=st.session_state.search_params['list_price'])
-
-    # 作成日の検索条件を追加
     st.session_state.search_params['contact_person'] = st.sidebar.text_input('プロジェクト担当者', value=st.session_state.search_params['contact_person'])
-    st.session_state.search_params['created_start'] = st.sidebar.date_input('作成日（開始）', value=st.session_state.search_params['created_start'])
-    st.session_state.search_params['created_end'] = st.sidebar.date_input('作成日（終了）', value=st.session_state.search_params['created_end'])
+
+    # 作成日（開始）の入力
+    start_date_enabled = st.sidebar.checkbox("作成日（開始）を指定", value=st.session_state.search_params['created_start_enabled'])
+    st.session_state.search_params['created_start_enabled'] = start_date_enabled
+
+    if start_date_enabled:
+        st.session_state.search_params['created_start'] = st.sidebar.date_input(
+            '作成日（開始）',
+            value=st.session_state.search_params['created_start'] or date.today(),
+            key='created_start_input'
+        )
+    else:
+        st.session_state.search_params['created_start'] = None
+
+    # 作成日（終了）の入力
+    end_date_enabled = st.sidebar.checkbox("作成日（終了）を指定", value=st.session_state.search_params['created_end_enabled'])
+    st.session_state.search_params['created_end_enabled'] = end_date_enabled
+
+    if end_date_enabled:
+        st.session_state.search_params['created_end'] = st.sidebar.date_input(
+            '作成日（終了）',
+            value=st.session_state.search_params['created_end'] or date.today(),
+            key='created_end_input'
+        )
+    else:
+        st.session_state.search_params['created_end'] = None
 
     # 検索ボタンとリセットボタンを横に並べる
     col1, col2 = st.sidebar.columns(2)
@@ -327,7 +350,9 @@ def main():
             'contact_person': '',
             'list_price': '',
             'created_start': None,
-            'created_end': None
+            'created_end': None,
+            'created_start_enabled': False,
+            'created_end_enabled': False
         }
         st.rerun()
 
@@ -357,8 +382,8 @@ def main():
                         st.session_state.search_params['group_name'], 
                         st.session_state.search_params['contact_person'], 
                         st.session_state.search_params['list_price'],
-                        st.session_state.search_params['created_start'],
-                        st.session_state.search_params['created_end']
+                        st.session_state.search_params['created_start'] if st.session_state.search_params['created_start_enabled'] else None,
+                        st.session_state.search_params['created_end'] if st.session_state.search_params['created_end_enabled'] else None
                     )
                 
                 if st.session_state.projects_df is not None and not st.session_state.projects_df.empty:
