@@ -293,7 +293,7 @@ def main():
     st.session_state.search_params['project_name'] = st.sidebar.text_input('プロジェクト名', value=st.session_state.search_params['project_name'])
     st.session_state.search_params['product_name'] = st.sidebar.text_input('商品名', value=st.session_state.search_params['product_name'])
     
-    # 商品ジャンルの選択肢を取得
+# 商品ジャンルの選択肢を取得
     product_genre_options = get_product_genre_options_from_json()
     st.session_state.search_params['product_genre'] = st.sidebar.selectbox(
         '商品ジャンル',
