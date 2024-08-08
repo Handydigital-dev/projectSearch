@@ -111,7 +111,8 @@ def get_project_data(ssh_client, project_name=None, product_name=None, talent_na
     if product_genre:
         genre_codes = [code for code, name in PRODUCT_GENRE_MAPPING.items() if name == product_genre]
         if genre_codes:
-            conditions.append(f"p.product_genre_cd IN ({','.join([f"'{code}'" for code in genre_codes])})")
+            genre_codes_str = ','.join([f"'{code}'" for code in genre_codes])
+            conditions.append(f"p.product_genre_cd IN ({genre_codes_str})")
     if group_name:
         conditions.append(f"tlg.name LIKE '%{group_name}%'")
     if contact_person:
@@ -293,7 +294,7 @@ def main():
     st.session_state.search_params['project_name'] = st.sidebar.text_input('プロジェクト名', value=st.session_state.search_params['project_name'])
     st.session_state.search_params['product_name'] = st.sidebar.text_input('商品名', value=st.session_state.search_params['product_name'])
     
-# 商品ジャンルの選択肢を取得
+    # 商品ジャンルの選択肢を取得
     product_genre_options = get_product_genre_options_from_json()
     st.session_state.search_params['product_genre'] = st.sidebar.selectbox(
         '商品ジャンル',
