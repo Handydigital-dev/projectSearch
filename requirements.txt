@@ -1,5 +1,6 @@
-streamlit==1.22.0
+numpy==1.23.5
 pandas==1.5.3
+streamlit==1.22.0
 mysql-connector-python==8.0.33
 paramiko==2.12.0
 python-dotenv==1.0.0
