@@ -272,7 +272,7 @@ def get_product_genre_options_from_json() -> List[str]:
 # メイン関数
 def main():
     st.title('AICSプロジェクト検索システム')
-    st.info('サイドバーに条件を入力して検索ボタンを押してください。リストのグループ名や担当者やリスト記載の価格で検索もできます。')
+    st.info('サイドバーに条件を入力して検索ボタンを押してください。リストのグループ名や担当者やリスト記載の価格で検索もできます。過去の結果が残って気になるときはリロードしてください。')
 
     # セッション状態の初期化
     if 'search_params' not in st.session_state:
